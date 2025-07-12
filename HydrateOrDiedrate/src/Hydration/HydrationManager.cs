@@ -11,7 +11,7 @@ namespace HydrateOrDiedrate;
 public static class HydrationManager
 {
     private const string HydrationAttributeKey = "hydration";
-    private static List<JObject> _lastAppliedPatches = new List<JObject>();
+
     private static readonly Dictionary<string, Vintagestory.API.Common.Func<ItemStack, float>> CustomHydrationEvaluators = new();
     public static void RegisterHydrationEvaluator(string collectibleCode, Vintagestory.API.Common.Func<ItemStack, float> evaluator)
     {
@@ -43,11 +43,8 @@ public static class HydrationManager
         }
         collectible.Attributes.Token[HydrationAttributeKey] = JToken.FromObject(hydrationValue);
     }
-    public static List<JObject> GetLastAppliedPatches()
-    {
-        return _lastAppliedPatches;
-    }
-    public static void ApplyHydrationPatches(ICoreAPI api, List<JObject> patches)
+
+    public static void ApplyHydrationPatches(ICoreAPI api, JObject[] patches)
     {
         var compiledPatches = PreCompilePatches(patches);
         var allPrefixes = compiledPatches
@@ -80,10 +77,9 @@ public static class HydrationManager
                 }
             }
         }
-
-        _lastAppliedPatches = patches;
     }
-    private static List<CompiledPatch> PreCompilePatches(List<JObject> patches)
+
+    private static List<CompiledPatch> PreCompilePatches(JObject[] patches)
     {
         var compiledPatches = new List<CompiledPatch>();
 

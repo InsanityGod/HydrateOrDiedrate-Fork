@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using Newtonsoft.Json.Linq;
@@ -10,7 +11,6 @@ namespace HydrateOrDiedrate.Hot_Weather;
 public static class CoolingManager
 {
     public const string CoolingAttributeKey = "cooling";
-    private static List<JObject> _lastAppliedPatches = new List<JObject>();
 
     public static void SetCooling(ICoreAPI api, CollectibleObject collectible, float coolingValue)
     {
@@ -38,12 +38,7 @@ public static class CoolingManager
         return float.IsNaN(maxCooling) ? 0f : maxCooling;
     }
 
-    public static List<JObject> GetLastAppliedPatches()
-    {
-        return _lastAppliedPatches;
-    }
-
-    public static void ApplyCoolingPatches(ICoreAPI api, List<JObject> patches)
+    public static void ApplyCoolingPatches(ICoreAPI api, JObject[] patches)
     {
         var compiledPatches = PreCompilePatches(patches);
         var allPrefixes = compiledPatches
@@ -75,8 +70,6 @@ public static class CoolingManager
                 }
             }
         }
-
-        _lastAppliedPatches = patches;
     }
 
     private class CompiledPatch
@@ -89,13 +82,13 @@ public static class CoolingManager
         public float? CatchAll;
     }
 
-    private static List<CompiledPatch> PreCompilePatches(List<JObject> patches)
+    private static List<CompiledPatch> PreCompilePatches(JObject[] patches)
     {
-        var list = new List<CompiledPatch>();
+        var list = new List<CompiledPatch>(patches.Length);
 
         foreach (var patch in patches)
         {
-            var itemNamePattern = patch["itemname"]?.ToString();
+            var itemNamePattern = patch.Value<string>("itemname");
             if (string.IsNullOrEmpty(itemNamePattern)) continue;
 
             var cp = new CompiledPatch
@@ -103,19 +96,16 @@ public static class CoolingManager
                 MainRegex = new Regex("^" + Regex.Escape(itemNamePattern).Replace("\\*", ".*") + "$", RegexOptions.Compiled)
             };
 
-            if (itemNamePattern.EndsWith("-*"))
-            {
-                cp.Prefix = itemNamePattern.Substring(0, itemNamePattern.Length - 1);
-            }
+            if (itemNamePattern.EndsWith("-*")) cp.Prefix = itemNamePattern[..^1];
 
-            if (patch.ContainsKey(CoolingAttributeKey))
+            if (patch.TryGetValue(CoolingAttributeKey, out var coolingToken))
             {
-                float directCooling = patch[CoolingAttributeKey].ToObject<float>();
+                float directCooling = coolingToken.Value<float>();
                 cp.DirectCooling = float.IsNaN(directCooling) ? 0f : directCooling;
             }
-            else if (patch.ContainsKey("coolingByType"))
+            else if (patch.TryGetValue("coolingByType", out coolingToken))
             {
-                var coolingByType = patch["coolingByType"].ToObject<Dictionary<string, float>>();
+                var coolingByType = coolingToken.ToObject<Dictionary<string, float>>();
                 foreach (var kvp in coolingByType)
                 {
                     float value = float.IsNaN(kvp.Value) ? 0f : kvp.Value;
@@ -123,9 +113,9 @@ public static class CoolingManager
                     {
                         cp.CatchAll = value;
                     }
-                    else if (kvp.Key.Contains("*"))
+                    else if (kvp.Key.Contains('*'))
                     {
-                        var subPattern = "^" + Regex.Escape(kvp.Key).Replace("\\*", ".*") + "$";
+                        var subPattern = "^" + Regex.Escape(kvp.Key).Replace("\\*", ".*") + "$"; //TODO extract this to a method
                         cp.SubWildcard.Add((new Regex(subPattern, RegexOptions.Compiled), value));
                     }
                     else

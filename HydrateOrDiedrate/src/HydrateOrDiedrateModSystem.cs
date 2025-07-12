@@ -9,6 +9,7 @@ using HydrateOrDiedrate.Hot_Weather;
 using HydrateOrDiedrate.HUD;
 using HydrateOrDiedrate.Keg;
 using HydrateOrDiedrate.patches;
+using HydrateOrDiedrate.src.Config;
 using HydrateOrDiedrate.wellwater;
 using HydrateOrDiedrate.winch;
 using HydrateOrDiedrate.XSkill;
@@ -46,7 +47,7 @@ public class HydrateOrDiedrateModSystem : ModSystem
     public override void StartPre(ICoreAPI api)
     {
         base.StartPre(api);
-        ItemHydrationConfigLoader.GenerateDefaultHydrationConfig();
+        ItemHydrationConfigLoader.GenerateDefaultHydrationConfig(); //QUESTION WHY? this isn't even used????
         BlockHydrationConfigLoader.GenerateDefaultBlockHydrationConfig();
         CoolingConfigLoader.GenerateDefaultCoolingConfig();
         harmony = new Harmony("com.chronolegionnaire.hydrateordiedrate");
@@ -68,13 +69,12 @@ public class HydrateOrDiedrateModSystem : ModSystem
     public override void AssetsFinalize(ICoreAPI api)
     {
         base.AssetsFinalize(api);
-        LoadAndApplyCoolingPatches(api);
 
-        if (LoadedConfig.EnableThirstMechanics)
-        {
-            LoadAndApplyHydrationPatches(api);
-            LoadAndApplyBlockHydrationPatches(api);
-        }
+        LoadAndApplyCoolingPatches(api);
+        
+        LoadAndApplyHydrationPatches(api);
+        LoadAndApplyBlockHydrationPatches(api);
+
         foreach (var block in api.World.Blocks)
         {
             if (block is BlockLiquidContainerTopOpened || block is BlockBarrel || block is BlockGroundStorage)
@@ -83,28 +83,32 @@ public class HydrateOrDiedrateModSystem : ModSystem
             }
         }
     }
-    private void LoadAndApplyHydrationPatches(ICoreAPI api)
+    private static void LoadAndApplyHydrationPatches(ICoreAPI api)
     {
-        if (LoadedConfig.EnableThirstMechanics)
-        {
-            List<JObject> hydrationPatches = ItemHydrationConfigLoader.LoadHydrationPatches(api);
-            HydrationManager.ApplyHydrationPatches(api, hydrationPatches);
-        }
+        if (!LoadedConfig.EnableThirstMechanics) return;
+
+        HydrationManager.ApplyHydrationPatches(
+            api,
+            ConfigLoader.LoadPatches(api, ItemHydrationConfigLoader.ConfigName, defaultConfigGenerator: ItemHydrationConfigLoader.GenerateDefaultHydrationConfig)
+        );
     }
-    private void LoadAndApplyBlockHydrationPatches(ICoreAPI api)
+
+    private static void LoadAndApplyBlockHydrationPatches(ICoreAPI api)
     {
-        if (LoadedConfig.EnableThirstMechanics)
-        {
-            List<JsonObject> loadedPatches = BlockHydrationConfigLoader.LoadBlockHydrationConfig(api)
-                .ConvertAll(jObject => new JsonObject(jObject));
-            BlockHydrationManager.ApplyBlockHydrationPatches(api, loadedPatches, api.World.Blocks);
-        }
+        if (!LoadedConfig.EnableThirstMechanics) return;
+
+        BlockHydrationManager.ApplyBlockHydrationPatches(
+            api, 
+            ConfigLoader.LoadPatches(api, BlockHydrationConfigLoader.ConfigName, "blockCode", BlockHydrationConfigLoader.GenerateDefaultBlockHydrationConfig),
+            api.World.Blocks
+        );
     }
-    private void LoadAndApplyCoolingPatches(ICoreAPI api)
-    {
-        List<JObject> coolingPatches = CoolingConfigLoader.LoadCoolingPatches(api);
-        CoolingManager.ApplyCoolingPatches(api, coolingPatches);
-    }
+
+    private static void LoadAndApplyCoolingPatches(ICoreAPI api) => CoolingManager.ApplyCoolingPatches(
+        api,
+        ConfigLoader.LoadPatches(api, CoolingConfigLoader.ConfigName, defaultConfigGenerator: CoolingConfigLoader.GenerateDefaultCoolingConfig)
+    );
+
     public override void Start(ICoreAPI api)
     {
         base.Start(api);

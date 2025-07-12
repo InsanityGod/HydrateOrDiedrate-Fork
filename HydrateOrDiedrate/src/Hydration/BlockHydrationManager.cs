@@ -14,7 +14,6 @@ namespace HydrateOrDiedrate
         private const string IsBoilingKey = "HoDisBoiling";
         private const string HungerReductionKey = "hungerReduction";
         private const string HealthKey = "health";
-        private static List<JsonObject> _lastAppliedPatches = new List<JsonObject>();
 
         public static void SetHydrationAttributes(ICoreAPI api, CollectibleObject collectible,
             float hydrationValue = 0f, bool isBoiling = false, int hungerReduction = 0, int healthEffect = 0)
@@ -36,7 +35,7 @@ namespace HydrateOrDiedrate
             collectible.Attributes.Token[HealthKey] = JToken.FromObject(healthEffect);
         }
 
-        public static void ApplyBlockHydrationPatches(ICoreAPI api, IEnumerable<JsonObject> patches,
+        public static void ApplyBlockHydrationPatches(ICoreAPI api, JObject[] patches,
             IEnumerable<CollectibleObject> collectibles)
         {
             var compiledPatches = PreCompilePatches(patches);
@@ -66,8 +65,6 @@ namespace HydrateOrDiedrate
                     }
                 }
             }
-
-            _lastAppliedPatches = patches.ToList();
         }
 
         public static float GetHydrationValue(CollectibleObject collectible, string type)
@@ -82,6 +79,7 @@ namespace HydrateOrDiedrate
             }
             catch (Exception)
             {
+                //ignore
             }
 
             return 0f;
@@ -96,8 +94,6 @@ namespace HydrateOrDiedrate
         public static int GetBlockHealth(CollectibleObject collectible) =>
             collectible?.Attributes?.Token[HealthKey]?.ToObject<int>() ?? 0;
 
-        public static List<JsonObject> GetLastAppliedPatches() => _lastAppliedPatches;
-
         private class CompiledPatch
         {
             public Regex MainRegex;
@@ -110,30 +106,30 @@ namespace HydrateOrDiedrate
             public int HealthEffect;
         }
 
-        private static List<CompiledPatch> PreCompilePatches(IEnumerable<JsonObject> patches)
+        private static List<CompiledPatch> PreCompilePatches(JObject[] patches)
         {
-            var compiledPatches = new List<CompiledPatch>();
+            var compiledPatches = new List<CompiledPatch>(patches.Length);
 
             foreach (var patch in patches)
             {
-                string blockCodePattern = patch["blockCode"]?.AsString();
+                string blockCodePattern = patch.Value<string>("blockCode");
                 if (string.IsNullOrEmpty(blockCodePattern)) continue;
 
                 var cp = new CompiledPatch
                 {
-                    MainRegex = new Regex("^" + Regex.Escape(blockCodePattern).Replace("\\*", ".*") + "$",
-                        RegexOptions.Compiled),
-                    IsBoiling = patch[IsBoilingKey]?.AsBool(false) ?? false,
-                    HungerReduction = patch[HungerReductionKey]?.AsInt(0) ?? 0,
-                    HealthEffect = patch[HealthKey]?.AsInt(0) ?? 0
+                    MainRegex = new Regex("^" + Regex.Escape(blockCodePattern).Replace("\\*", ".*") + "$", RegexOptions.Compiled),
+                    IsBoiling = patch.Value<bool>(IsBoilingKey),
+                    HungerReduction = patch.Value<int>(HungerReductionKey),
+                    HealthEffect = patch.Value<int>(HealthKey)
                 };
 
                 if (blockCodePattern.EndsWith("-*"))
                 {
-                    cp.Prefix = blockCodePattern.Substring(0, blockCodePattern.Length - 1);
+                    cp.Prefix = blockCodePattern[..^1];
                 }
 
-                var hydrationByType = patch[HydrationByTypeKey]?.AsObject<Dictionary<string, float>>();
+                var hydrationByType = patch[HydrationByTypeKey]?.ToObject<Dictionary<string, float>>();
+                
                 if (hydrationByType != null)
                 {
                     foreach (var kvp in hydrationByType)
